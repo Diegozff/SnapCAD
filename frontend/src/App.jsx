@@ -131,6 +131,9 @@ function Landing({ onFile }) {
   return (
     <div className="flex flex-1 items-center justify-center px-6">
       <div className="w-full max-w-xl text-center">
+        <div className="mb-8 flex justify-center">
+          <Logo variant="full" />
+        </div>
         <h1 className="text-3xl font-extrabold text-white sm:text-4xl">
           De la foto al <span className="text-brand-400">plano CAD</span>
         </h1>
