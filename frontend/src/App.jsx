@@ -6,6 +6,7 @@ import BlueprintCanvas from "./components/BlueprintCanvas.jsx";
 import { analyzeImage } from "./api.js";
 import { computeRatio } from "./lib/scale.js";
 import { downloadPDF, downloadSVG } from "./lib/export.js";
+import { DEMO_GEOMETRY } from "./lib/demoData.js";
 
 export default function App() {
   const [imageURL, setImageURL] = useState(null);
@@ -16,8 +17,20 @@ export default function App() {
   const [ratio, setRatio] = useState(null);
   const [selectedDimId, setSelectedDimId] = useState(null);
   const [themeName, setThemeName] = useState("blueprint");
+  const [isDemo, setIsDemo] = useState(false);
 
   const svgRef = useRef(null);
+
+  function loadDemo() {
+    setError(null);
+    setLoading(false);
+    setImageURL(null);
+    setRatio(null);
+    setSelectedDimId(null);
+    setIsDemo(true);
+    // Deep-clone so edits never mutate the shared sample.
+    setGeometry(structuredClone(DEMO_GEOMETRY));
+  }
 
   async function handleFile(file) {
     setError(null);
@@ -25,6 +38,7 @@ export default function App() {
     setGeometry(null);
     setRatio(null);
     setSelectedDimId(null);
+    setIsDemo(false);
     setImageURL(URL.createObjectURL(file));
     try {
       const data = await analyzeImage(file);
@@ -47,6 +61,7 @@ export default function App() {
     setError(null);
     setRatio(null);
     setSelectedDimId(null);
+    setIsDemo(false);
   }
 
   const showWorkspace = geometry || loading || error;
@@ -68,7 +83,7 @@ export default function App() {
 
       {/* Body */}
       {!showWorkspace ? (
-        <Landing onFile={handleFile} />
+        <Landing onFile={handleFile} onDemo={loadDemo} />
       ) : (
         <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[340px_1fr]">
           {/* Sidebar */}
@@ -112,6 +127,11 @@ export default function App() {
                     <img src={imageURL} alt="Foto original" className="block w-full" />
                   </div>
                 )}
+                {isDemo && (
+                  <div className="absolute left-4 top-4 rounded-full bg-amber-400/90 px-3 py-1 text-xs font-bold uppercase tracking-wider text-navy-900 shadow">
+                    Demo
+                  </div>
+                )}
                 {ratio == null && (
                   <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-brand-500/90 px-4 py-1.5 text-xs font-semibold text-white shadow">
                     Selecciona una cota e introduce su medida real para escalar el plano
@@ -127,7 +147,7 @@ export default function App() {
 }
 
 /* ------------------------------ sub-views ------------------------------ */
-function Landing({ onFile }) {
+function Landing({ onFile, onDemo }) {
   return (
     <div className="flex flex-1 items-center justify-center px-6">
       <div className="w-full max-w-xl text-center">
@@ -144,6 +164,15 @@ function Landing({ onFile }) {
         </p>
         <div className="mt-8">
           <Dropzone onFile={onFile} />
+        </div>
+        <div className="mt-4 flex items-center justify-center gap-3 text-sm">
+          <span className="text-brand-200/70">¿Sin API key?</span>
+          <button
+            onClick={onDemo}
+            className="rounded-lg border border-brand-500 px-4 py-2 font-semibold text-brand-300 transition hover:bg-brand-500/10"
+          >
+            Ver ejemplo →
+          </button>
         </div>
         <p className="mt-4 text-xs text-brand-200/70">
           Tus imágenes se procesan con Claude Opus 4.8 Vision.
