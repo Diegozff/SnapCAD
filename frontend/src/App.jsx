@@ -55,6 +55,18 @@ export default function App() {
     if (r != null) setRatio(r);
   }
 
+  function renameDim(id, label) {
+    setGeometry((g) => ({
+      ...g,
+      dimensions: g.dimensions.map((d) => (d.id === id ? { ...d, label } : d)),
+    }));
+  }
+
+  function deleteDim(id) {
+    setGeometry((g) => ({ ...g, dimensions: g.dimensions.filter((d) => d.id !== id) }));
+    if (selectedDimId === id) setSelectedDimId(null);
+  }
+
   function reset() {
     setGeometry(null);
     setImageURL(null);
@@ -95,6 +107,8 @@ export default function App() {
                 selectedDimId={selectedDimId}
                 onSelectDim={setSelectedDimId}
                 onSetReference={setReference}
+                onRenameDim={renameDim}
+                onDeleteDim={deleteDim}
                 onReset={reset}
                 themeName={themeName}
                 onToggleTheme={() =>

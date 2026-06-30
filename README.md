@@ -16,6 +16,17 @@ SnapCAD/
 └─ frontend/   Vite + React + Tailwind (lienzo SVG acotado)
 ```
 
+## Funciones
+
+- 📷 Análisis de la foto con Claude Opus 4.8 Vision → geometría 2D estructurada.
+- 📐 Croquis técnico con cotas estándar (flechas `<marker>`, texto centrado y rotado).
+- 🔍 **Pan & zoom** en el lienzo (rueda para zoom hacia el cursor, arrastrar para mover, botón 1:1).
+- ✏️ **Editar cotas**: renombrar la etiqueta o eliminar cotas detectadas.
+- 📏 Escala automática a partir de una sola medida de referencia.
+- 🎨 Temas Blueprint / Blanco.
+- 💾 Exportar a **SVG** y **PDF vectorial** (con respaldo rasterizado).
+- 🧪 **Modo demo** sin API key (botón "Ver ejemplo").
+
 ## El "truco de la escala"
 
 1. Claude devuelve la geometría en un **espacio de píxeles normalizado** (lado

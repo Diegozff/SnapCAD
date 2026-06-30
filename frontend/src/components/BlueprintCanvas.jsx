@@ -1,4 +1,4 @@
-import { forwardRef, useMemo } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { dimensionDisplay } from "../lib/scale.js";
 
 /* ------------------------------------------------------------------ */
@@ -6,29 +6,21 @@ import { dimensionDisplay } from "../lib/scale.js";
 /* ------------------------------------------------------------------ */
 const PART_STROKE = 2.4;
 const DIM_STROKE = 1.3;
-const EXT_GAP = 7; // gap between part edge and start of witness line
-const EXT_OVER = 9; // how far the witness line overshoots the dim line
-const DIM_OFFSET = 38; // distance of the dim line from the measured edge
+const EXT_GAP = 7;
+const EXT_OVER = 9;
+const DIM_OFFSET = 38;
 const FONT = 22;
+const MIN_K = 0.4;
+const MAX_K = 8;
 
 const THEMES = {
   blueprint: {
-    bg: "#0E2A44",
-    grid: "#16395C",
-    part: "#CFE6F7",
-    dim: "#8FC7F0",
-    text: "#EAF4FD",
-    sel: "#3D92E0",
-    selText: "#FFFFFF",
+    bg: "#0E2A44", grid: "#16395C", part: "#CFE6F7", dim: "#8FC7F0",
+    text: "#EAF4FD", sel: "#3D92E0", selText: "#FFFFFF",
   },
   white: {
-    bg: "#FFFFFF",
-    grid: "#E4ECF3",
-    part: "#11314E",
-    dim: "#1E4D75",
-    text: "#11314E",
-    sel: "#2D7DD2",
-    selText: "#11314E",
+    bg: "#FFFFFF", grid: "#E4ECF3", part: "#11314E", dim: "#1E4D75",
+    text: "#11314E", sel: "#2D7DD2", selText: "#11314E",
   },
 };
 
@@ -39,6 +31,7 @@ const scale = (a, k) => ({ x: a.x * k, y: a.y * k });
 const len = (a) => Math.hypot(a.x, a.y) || 1;
 const norm = (a) => scale(a, 1 / len(a));
 const perp = (a) => ({ x: -a.y, y: a.x });
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 function centroidOf(entities) {
   const pts = [];
@@ -54,7 +47,6 @@ function centroidOf(entities) {
   };
 }
 
-/** Keep dimension text upright regardless of line direction. */
 function uprightAngle(dx, dy) {
   let a = (Math.atan2(dy, dx) * 180) / Math.PI;
   if (a > 90) a -= 180;
@@ -69,16 +61,13 @@ function Entity({ e, color }) {
   if (e.type === "circle") return <circle cx={e.cx} cy={e.cy} r={e.r} {...common} />;
   if (e.type === "rect") return <rect x={e.x} y={e.y} width={e.w} height={e.h} rx={1} {...common} />;
   if (e.type === "arc") {
-    // Robust arc: sample points across the angle range (avoids flag bugs).
     const a0 = (e.start_angle * Math.PI) / 180;
     const a1 = (e.end_angle * Math.PI) / 180;
     const steps = 28;
     let d = "";
     for (let i = 0; i <= steps; i++) {
       const t = a0 + ((a1 - a0) * i) / steps;
-      const x = e.cx + e.r * Math.cos(t);
-      const y = e.cy + e.r * Math.sin(t);
-      d += `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)} `;
+      d += `${i === 0 ? "M" : "L"}${(e.cx + e.r * Math.cos(t)).toFixed(2)},${(e.cy + e.r * Math.sin(t)).toFixed(2)} `;
     }
     return <path d={d} {...common} />;
   }
@@ -88,15 +77,11 @@ function Entity({ e, color }) {
 /* -------------------------- dimension rendering -------------------------- */
 function Dimension({ dim, ratio, centroid, theme, selected, onSelect }) {
   const stroke = selected ? theme.sel : theme.dim;
-  const textFill = selected ? (theme.selText === "#FFFFFF" ? theme.sel : theme.text) : theme.text;
+  const textFill = selected ? theme.sel : theme.text;
   const sw = selected ? DIM_STROKE * 1.7 : DIM_STROKE;
   const label = dimensionDisplay(dim, ratio);
-  const click = (e) => {
-    e.stopPropagation();
-    onSelect(dim.id);
-  };
-
   const markerId = selected ? "arrowSel" : "arrow";
+  const click = (e) => { e.stopPropagation(); onSelect(dim.id); };
 
   if (dim.kind === "linear") {
     const p1 = { x: dim.x1, y: dim.y1 };
@@ -108,7 +93,6 @@ function Dimension({ dim, ratio, centroid, theme, selected, onSelect }) {
     const off = scale(n, DIM_OFFSET * side);
     const A = add(p1, off);
     const B = add(p2, off);
-    // witness lines
     const w1a = add(p1, scale(n, EXT_GAP * side));
     const w1b = add(A, scale(n, EXT_OVER * side));
     const w2a = add(p2, scale(n, EXT_GAP * side));
@@ -121,28 +105,21 @@ function Dimension({ dim, ratio, centroid, theme, selected, onSelect }) {
       <g className="cursor-pointer" onClick={click}>
         <line x1={w1a.x} y1={w1a.y} x2={w1b.x} y2={w1b.y} stroke={stroke} strokeWidth={sw} />
         <line x1={w2a.x} y1={w2a.y} x2={w2b.x} y2={w2b.y} stroke={stroke} strokeWidth={sw} />
-        <line
-          x1={A.x} y1={A.y} x2={B.x} y2={B.y}
-          stroke={stroke} strokeWidth={sw}
-          markerStart={`url(#${markerId})`} markerEnd={`url(#${markerId})`}
-        />
-        <text
-          x={tPos.x} y={tPos.y} fill={textFill} fontSize={FONT} fontWeight="600"
+        <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke={stroke} strokeWidth={sw}
+          markerStart={`url(#${markerId})`} markerEnd={`url(#${markerId})`} />
+        <text x={tPos.x} y={tPos.y} fill={textFill} fontSize={FONT} fontWeight="600"
           textAnchor="middle" dominantBaseline="central"
           transform={`rotate(${angle} ${tPos.x} ${tPos.y})`}
-          style={{ paintOrder: "stroke", stroke: theme.bg, strokeWidth: 4 }}
-        >
+          style={{ paintOrder: "stroke", stroke: theme.bg, strokeWidth: 4 }}>
           {label}
         </text>
-        {/* fat invisible hit area */}
         <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke="transparent" strokeWidth={26} />
       </g>
     );
   }
 
-  // diameter / radius
   const C = { x: dim.x1, y: dim.y1 };
-  const dir = norm({ x: 1, y: -1 }); // 45° leader
+  const dir = norm({ x: 1, y: -1 });
   const reach = dim.kind === "diameter" ? dim.px / 2 : dim.px;
   const E2 = add(C, scale(dir, reach));
   const E1 = dim.kind === "diameter" ? sub(C, scale(dir, reach)) : C;
@@ -151,18 +128,12 @@ function Dimension({ dim, ratio, centroid, theme, selected, onSelect }) {
 
   return (
     <g className="cursor-pointer" onClick={click}>
-      <line
-        x1={E1.x} y1={E1.y} x2={E2.x} y2={E2.y}
-        stroke={stroke} strokeWidth={sw}
-        markerEnd={`url(#${markerId})`}
-        markerStart={dim.kind === "diameter" ? `url(#${markerId})` : undefined}
-      />
-      <text
-        x={tPos.x} y={tPos.y} fill={textFill} fontSize={FONT} fontWeight="600"
+      <line x1={E1.x} y1={E1.y} x2={E2.x} y2={E2.y} stroke={stroke} strokeWidth={sw}
+        markerEnd={`url(#${markerId})`} markerStart={dim.kind === "diameter" ? `url(#${markerId})` : undefined} />
+      <text x={tPos.x} y={tPos.y} fill={textFill} fontSize={FONT} fontWeight="600"
         textAnchor="middle" dominantBaseline="central"
         transform={`rotate(${angle} ${tPos.x} ${tPos.y})`}
-        style={{ paintOrder: "stroke", stroke: theme.bg, strokeWidth: 4 }}
-      >
+        style={{ paintOrder: "stroke", stroke: theme.bg, strokeWidth: 4 }}>
         {label}
       </text>
       <line x1={E1.x} y1={E1.y} x2={E2.x} y2={E2.y} stroke="transparent" strokeWidth={26} />
@@ -180,62 +151,122 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
   const h = geometry?.image_height || 1000;
   const centroid = useMemo(() => centroidOf(geometry?.entities || []), [geometry]);
 
+  const svgRef = useRef(null);
+  useImperativeHandle(ref, () => svgRef.current);
+
+  const [view, setView] = useState({ k: 1, x: 0, y: 0 });
+  const drag = useRef({ active: false, moved: false, last: null });
+
+  // reset view whenever a new part loads
+  useEffect(() => { setView({ k: 1, x: 0, y: 0 }); }, [geometry]);
+
+  const userCoords = (clientX, clientY) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    const u = pt.matrixTransform(ctm.inverse());
+    return { x: u.x, y: u.y };
+  };
+
+  const zoomAt = (p, factor) => {
+    setView((v) => {
+      const k = clamp(v.k * factor, MIN_K, MAX_K);
+      const real = k / v.k;
+      return { k, x: p.x - (p.x - v.x) * real, y: p.y - (p.y - v.y) * real };
+    });
+  };
+
+  // non-passive wheel listener so we can preventDefault
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      zoomAt(userCoords(e.clientX, e.clientY), e.deltaY < 0 ? 1.15 : 1 / 1.15);
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const onPointerDown = (e) => {
+    drag.current = { active: true, moved: false, last: userCoords(e.clientX, e.clientY) };
+    svgRef.current?.setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e) => {
+    if (!drag.current.active) return;
+    const cur = userCoords(e.clientX, e.clientY);
+    const d = sub(cur, drag.current.last);
+    if (Math.abs(d.x) + Math.abs(d.y) > 3) drag.current.moved = true;
+    drag.current.last = cur;
+    setView((v) => ({ ...v, x: v.x + d.x, y: v.y + d.y }));
+  };
+  const endDrag = (e) => {
+    if (drag.current.active) svgRef.current?.releasePointerCapture?.(e.pointerId);
+    drag.current.active = false;
+  };
+  const onBgClick = () => {
+    if (drag.current.moved) { drag.current.moved = false; return; }
+    onSelectDim(null);
+  };
+
   if (!geometry) return null;
+  const center = () => ({ x: w / 2, y: h / 2 });
 
   return (
-    <svg
-      ref={ref}
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="xMidYMid meet"
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-full w-full"
-      onClick={() => onSelectDim(null)}
-    >
-      <defs>
-        <marker
-          id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
-          markerWidth="14" markerHeight="14" orient="auto-start-reverse"
-          markerUnits="userSpaceOnUse"
-        >
-          <path d="M0,1 L9,5 L0,9 z" fill={theme.dim} />
-        </marker>
-        <marker
-          id="arrowSel" viewBox="0 0 10 10" refX="9" refY="5"
-          markerWidth="16" markerHeight="16" orient="auto-start-reverse"
-          markerUnits="userSpaceOnUse"
-        >
-          <path d="M0,1 L9,5 L0,9 z" fill={theme.sel} />
-        </marker>
-        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-          <path d="M40 0 L0 0 0 40" fill="none" stroke={theme.grid} strokeWidth="0.8" />
-        </pattern>
-      </defs>
+    <div className="relative h-full w-full">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${w} ${h}`}
+        preserveAspectRatio="xMidYMid meet"
+        xmlns="http://www.w3.org/2000/svg"
+        className={`h-full w-full touch-none ${drag.current.active ? "cursor-grabbing" : "cursor-grab"}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerLeave={endDrag}
+        onClick={onBgClick}
+      >
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14"
+            orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+            <path d="M0,1 L9,5 L0,9 z" fill={theme.dim} />
+          </marker>
+          <marker id="arrowSel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16"
+            orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+            <path d="M0,1 L9,5 L0,9 z" fill={theme.sel} />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M40 0 L0 0 0 40" fill="none" stroke={theme.grid} strokeWidth="0.8" />
+          </pattern>
+        </defs>
 
-      <rect x="0" y="0" width={w} height={h} fill={theme.bg} />
-      <rect x="0" y="0" width={w} height={h} fill="url(#grid)" />
+        {/* fixed background + grid (outside the pan/zoom group) */}
+        <rect x="0" y="0" width={w} height={h} fill={theme.bg} />
+        <rect x="0" y="0" width={w} height={h} fill="url(#grid)" />
 
-      {/* part geometry */}
-      <g>
-        {geometry.entities.map((e) => (
-          <Entity key={e.id} e={e} color={theme.part} />
-        ))}
-      </g>
+        {/* pan/zoom content — transform stripped on export */}
+        <g id="snapcad-content" transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
+          {geometry.entities.map((e) => (
+            <Entity key={e.id} e={e} color={theme.part} />
+          ))}
+          {geometry.dimensions.map((dm) => (
+            <Dimension key={dm.id} dim={dm} ratio={ratio} centroid={centroid} theme={theme}
+              selected={selectedDimId === dm.id} onSelect={onSelectDim} />
+          ))}
+        </g>
+      </svg>
 
-      {/* dimensions */}
-      <g>
-        {geometry.dimensions.map((d) => (
-          <Dimension
-            key={d.id}
-            dim={d}
-            ratio={ratio}
-            centroid={centroid}
-            theme={theme}
-            selected={selectedDimId === d.id}
-            onSelect={onSelectDim}
-          />
-        ))}
-      </g>
-    </svg>
+      {/* zoom controls */}
+      <div className="absolute left-4 top-4 flex flex-col overflow-hidden rounded-lg border border-navy-600 bg-navy-900/80 backdrop-blur">
+        <button onClick={() => zoomAt(center(), 1.25)} className="px-3 py-2 text-lg leading-none text-brand-200 hover:bg-navy-700" title="Acercar">+</button>
+        <button onClick={() => zoomAt(center(), 1 / 1.25)} className="border-t border-navy-700 px-3 py-2 text-lg leading-none text-brand-200 hover:bg-navy-700" title="Alejar">−</button>
+        <button onClick={() => setView({ k: 1, x: 0, y: 0 })} className="border-t border-navy-700 px-3 py-1.5 text-[10px] font-semibold text-brand-200 hover:bg-navy-700" title="Restablecer vista">1:1</button>
+      </div>
+    </div>
   );
 });
 

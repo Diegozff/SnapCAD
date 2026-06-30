@@ -11,6 +11,8 @@ export default function Sidebar({
   selectedDimId,
   onSelectDim,
   onSetReference,
+  onRenameDim,
+  onDeleteDim,
   onReset,
   themeName,
   onToggleTheme,
@@ -19,11 +21,13 @@ export default function Sidebar({
 }) {
   const selected = geometry?.dimensions.find((d) => d.id === selectedDimId);
   const [mm, setMm] = useState("");
+  const [label, setLabel] = useState("");
 
-  // Reset the input whenever the selected dimension changes.
+  // Sync inputs whenever the selected dimension changes.
   useEffect(() => {
     setMm("");
-  }, [selectedDimId]);
+    setLabel(selected?.label ?? "");
+  }, [selectedDimId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyReference = (e) => {
     e.preventDefault();
@@ -97,6 +101,31 @@ export default function Sidebar({
         )}
       </div>
 
+      {/* edit selected dimension */}
+      {selected && (
+        <div className="rounded-xl border border-brand-500/40 bg-navy-900/50 p-4">
+          <div className="text-sm font-semibold text-white">Editar cota</div>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={label}
+              onChange={(e) => {
+                setLabel(e.target.value);
+                onRenameDim(selected.id, e.target.value);
+              }}
+              placeholder="Etiqueta"
+              className="w-full rounded-lg border border-navy-600 bg-navy-800 px-3 py-2 text-sm text-white outline-none focus:border-brand-400"
+            />
+            <button
+              onClick={() => onDeleteDim(selected.id)}
+              title="Eliminar cota"
+              className="rounded-lg border border-red-500/60 px-3 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/15"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* dimension list */}
       <div className="rounded-xl border border-navy-600 bg-navy-900/50 p-4">
         <div className="flex items-center justify-between">
@@ -109,11 +138,11 @@ export default function Sidebar({
           {geometry?.dimensions.map((d) => {
             const isSel = d.id === selectedDimId;
             return (
-              <li key={d.id}>
+              <li key={d.id} className="group flex items-stretch gap-1">
                 <button
                   onClick={() => onSelectDim(isSel ? null : d.id)}
                   className={[
-                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition",
+                    "flex flex-1 items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition",
                     isSel
                       ? "bg-brand-500/25 text-white ring-1 ring-brand-400"
                       : "bg-navy-800/60 text-brand-100 hover:bg-navy-700/60",
@@ -125,6 +154,13 @@ export default function Sidebar({
                       ? `${dimensionDisplay(d, ratio)} mm`
                       : `${Math.round(d.px)} px`}
                   </span>
+                </button>
+                <button
+                  onClick={() => onDeleteDim(d.id)}
+                  title="Eliminar cota"
+                  className="rounded-lg px-2 text-brand-200/50 transition hover:bg-red-500/15 hover:text-red-300"
+                >
+                  ✕
                 </button>
               </li>
             );
