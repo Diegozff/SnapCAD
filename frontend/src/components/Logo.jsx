@@ -7,7 +7,7 @@ import { useState } from "react";
  * `frontend/public/logo.png`). If that file is missing, it gracefully falls
  * back to a built-in SVG mark so the header is never broken.
  */
-export default function Logo({ size = 44 }) {
+export default function Logo({ size = 52 }) {
   const [imgOk, setImgOk] = useState(true);
 
   if (imgOk) {
