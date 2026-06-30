@@ -21,7 +21,7 @@ SnapCAD/
 - 📷 Análisis de la foto con Claude Opus 4.8 Vision → geometría 2D estructurada.
 - 📐 Croquis técnico con cotas estándar (flechas `<marker>`, texto centrado y rotado).
 - 🔍 **Pan & zoom** en el lienzo (rueda para zoom hacia el cursor, arrastrar para mover, botón 1:1).
-- ✏️ **Editar cotas**: renombrar la etiqueta o eliminar cotas detectadas.
+- ✏️ **Editar cotas**: renombrar etiqueta, eliminar, **arrastrar para reposicionar** y **agregar cotas nuevas** (herramienta de 2 clics con *snapping* a vértices y centros).
 - 📏 Escala automática a partir de una sola medida de referencia.
 - 🎨 Temas Blueprint / Blanco.
 - 💾 Exportar a **SVG** y **PDF vectorial** (con respaldo rasterizado).

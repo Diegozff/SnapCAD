@@ -67,6 +67,18 @@ export default function App() {
     if (selectedDimId === id) setSelectedDimId(null);
   }
 
+  function updateDim(id, patch) {
+    setGeometry((g) => ({
+      ...g,
+      dimensions: g.dimensions.map((d) => (d.id === id ? { ...d, ...patch } : d)),
+    }));
+  }
+
+  function addDim(dim) {
+    setGeometry((g) => ({ ...g, dimensions: [...g.dimensions, dim] }));
+    setSelectedDimId(dim.id);
+  }
+
   function reset() {
     setGeometry(null);
     setImageURL(null);
@@ -133,6 +145,8 @@ export default function App() {
                     ratio={ratio}
                     selectedDimId={selectedDimId}
                     onSelectDim={setSelectedDimId}
+                    onUpdateDim={updateDim}
+                    onAddDim={addDim}
                     themeName={themeName}
                   />
                 </div>
