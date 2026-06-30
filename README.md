@@ -5,6 +5,11 @@ acotado. Claude (Opus 4.8 Vision) analiza la imagen y devuelve la geometría
 estructurada; el frontend dibuja el croquis y escala todas las cotas a partir de
 una sola medida de referencia.
 
+![Vista previa del modo demo de SnapCAD](docs/preview.png)
+
+> Croquis del modo demo (sin API key) tras fijar **W1 = 150 mm** como referencia:
+> el resto de las cotas se calculan automáticamente.
+
 ```
 SnapCAD/
 ├─ backend/    FastAPI + Anthropic SDK (motor de análisis geométrico)
