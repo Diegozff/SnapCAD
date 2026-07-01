@@ -13,6 +13,11 @@ export default function Sidebar({
   onSetReference,
   onRenameDim,
   onDeleteDim,
+  onBeginHistory,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   onReset,
   themeName,
   onToggleTheme,
@@ -38,6 +43,26 @@ export default function Sidebar({
 
   return (
     <aside className="flex h-full w-full flex-col gap-5 overflow-y-auto bg-navy-800/60 p-5">
+      {/* undo / redo */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Deshacer (Ctrl+Z)"
+          className="rounded-lg bg-navy-700 px-3 py-2 text-sm font-medium text-brand-200 transition hover:bg-navy-600 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          ↶ Deshacer
+        </button>
+        <button
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="Rehacer (Ctrl+Shift+Z)"
+          className="rounded-lg bg-navy-700 px-3 py-2 text-sm font-medium text-brand-200 transition hover:bg-navy-600 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          ↷ Rehacer
+        </button>
+      </div>
+
       {/* part summary */}
       <div className="rounded-xl border border-navy-600 bg-navy-900/50 p-4">
         <div className="text-xs uppercase tracking-wider text-brand-300">Pieza detectada</div>
@@ -108,6 +133,7 @@ export default function Sidebar({
           <div className="mt-2 flex gap-2">
             <input
               value={label}
+              onFocus={onBeginHistory}
               onChange={(e) => {
                 setLabel(e.target.value);
                 onRenameDim(selected.id, e.target.value);

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Logo from "./components/Logo.jsx";
 import Dropzone from "./components/Dropzone.jsx";
 import Sidebar from "./components/Sidebar.jsx";
@@ -19,7 +19,36 @@ export default function App() {
   const [themeName, setThemeName] = useState("blueprint");
   const [isDemo, setIsDemo] = useState(false);
 
+  // Undo/redo history of geometry snapshots.
+  const [past, setPast] = useState([]);
+  const [future, setFuture] = useState([]);
+
   const svgRef = useRef(null);
+
+  /** Snapshot the current geometry before a mutating interaction. */
+  function beginHistory() {
+    if (!geometry) return;
+    setPast((p) => [...p, geometry]);
+    setFuture([]);
+  }
+
+  function undo() {
+    if (!past.length) return;
+    const prev = past[past.length - 1];
+    setFuture((f) => [geometry, ...f]);
+    setPast((p) => p.slice(0, -1));
+    setGeometry(prev);
+    setSelectedDimId(null);
+  }
+
+  function redo() {
+    if (!future.length) return;
+    const next = future[0];
+    setPast((p) => [...p, geometry]);
+    setFuture((f) => f.slice(1));
+    setGeometry(next);
+    setSelectedDimId(null);
+  }
 
   function loadDemo() {
     setError(null);
@@ -28,6 +57,8 @@ export default function App() {
     setRatio(null);
     setSelectedDimId(null);
     setIsDemo(true);
+    setPast([]);
+    setFuture([]);
     // Deep-clone so edits never mutate the shared sample.
     setGeometry(structuredClone(DEMO_GEOMETRY));
   }
@@ -39,6 +70,8 @@ export default function App() {
     setRatio(null);
     setSelectedDimId(null);
     setIsDemo(false);
+    setPast([]);
+    setFuture([]);
     setImageURL(URL.createObjectURL(file));
     try {
       const data = await analyzeImage(file);
@@ -63,10 +96,13 @@ export default function App() {
   }
 
   function deleteDim(id) {
+    beginHistory();
     setGeometry((g) => ({ ...g, dimensions: g.dimensions.filter((d) => d.id !== id) }));
     if (selectedDimId === id) setSelectedDimId(null);
   }
 
+  // Live mutator used during drags and rename — history is snapshotted by the
+  // caller (beginHistory) at the start of the interaction.
   function updateDim(id, patch) {
     setGeometry((g) => ({
       ...g,
@@ -75,6 +111,7 @@ export default function App() {
   }
 
   function addDim(dim) {
+    beginHistory();
     setGeometry((g) => ({ ...g, dimensions: [...g.dimensions, dim] }));
     setSelectedDimId(dim.id);
   }
@@ -86,7 +123,26 @@ export default function App() {
     setRatio(null);
     setSelectedDimId(null);
     setIsDemo(false);
+    setPast([]);
+    setFuture([]);
   }
+
+  const canUndo = past.length > 0;
+  const canRedo = future.length > 0;
+
+  // Keyboard shortcuts: Ctrl/Cmd+Z (undo), Ctrl/Cmd+Shift+Z or Ctrl+Y (redo).
+  useEffect(() => {
+    function onKey(e) {
+      if (!geometry) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); redo(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }); // re-bind each render so undo/redo close over current state
 
   const showWorkspace = geometry || loading || error;
 
@@ -121,6 +177,11 @@ export default function App() {
                 onSetReference={setReference}
                 onRenameDim={renameDim}
                 onDeleteDim={deleteDim}
+                onBeginHistory={beginHistory}
+                onUndo={undo}
+                onRedo={redo}
+                canUndo={canUndo}
+                canRedo={canRedo}
                 onReset={reset}
                 themeName={themeName}
                 onToggleTheme={() =>
@@ -147,6 +208,7 @@ export default function App() {
                     onSelectDim={setSelectedDimId}
                     onUpdateDim={updateDim}
                     onAddDim={addDim}
+                    onBeginHistory={beginHistory}
                     themeName={themeName}
                   />
                 </div>

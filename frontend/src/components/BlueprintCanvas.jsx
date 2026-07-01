@@ -17,11 +17,11 @@ const SNAP_DIST = 18;
 const THEMES = {
   blueprint: {
     bg: "#0E2A44", grid: "#16395C", part: "#CFE6F7", dim: "#8FC7F0",
-    text: "#EAF4FD", sel: "#3D92E0", selText: "#FFFFFF", accent: "#F4B740",
+    text: "#EAF4FD", sel: "#3D92E0", accent: "#F4B740",
   },
   white: {
     bg: "#FFFFFF", grid: "#E4ECF3", part: "#11314E", dim: "#1E4D75",
-    text: "#11314E", sel: "#2D7DD2", selText: "#11314E", accent: "#D98A00",
+    text: "#11314E", sel: "#2D7DD2", accent: "#D98A00",
   },
 };
 
@@ -49,7 +49,6 @@ function centroidOf(entities) {
   };
 }
 
-/** Snap candidates: line ends, circle/arc centers, rect corners. */
 function snapPointsOf(entities) {
   const pts = [];
   for (const e of entities) {
@@ -107,6 +106,7 @@ function Dimension({ dim, ratio, centroid, theme, selected, onDown }) {
   const markerId = selected ? "arrowSel" : "arrow";
   const down = (e) => onDown(e, dim);
   const labelStyle = { paintOrder: "stroke", stroke: theme.bg, strokeWidth: 4 };
+  const fill = selected ? theme.sel : theme.text;
 
   if (dim.kind === "linear") {
     const p1 = { x: dim.x1, y: dim.y1 };
@@ -132,7 +132,7 @@ function Dimension({ dim, ratio, centroid, theme, selected, onDown }) {
         <line x1={w2a.x} y1={w2a.y} x2={w2b.x} y2={w2b.y} stroke={stroke} strokeWidth={sw} />
         <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke={stroke} strokeWidth={sw}
           markerStart={`url(#${markerId})`} markerEnd={`url(#${markerId})`} />
-        <text x={tPos.x} y={tPos.y} fill={selected ? theme.sel : theme.text} fontSize={FONT} fontWeight="600"
+        <text x={tPos.x} y={tPos.y} fill={fill} fontSize={FONT} fontWeight="600"
           textAnchor="middle" dominantBaseline="central"
           transform={`rotate(${angle} ${tPos.x} ${tPos.y})`} style={labelStyle}>
           {label}
@@ -155,7 +155,7 @@ function Dimension({ dim, ratio, centroid, theme, selected, onDown }) {
     <g className="cursor-move" onPointerDown={down}>
       <line x1={E1.x} y1={E1.y} x2={E2.x} y2={E2.y} stroke={stroke} strokeWidth={sw}
         markerEnd={`url(#${markerId})`} markerStart={dim.kind === "diameter" ? `url(#${markerId})` : undefined} />
-      <text x={tPos.x} y={tPos.y} fill={selected ? theme.sel : theme.text} fontSize={FONT} fontWeight="600"
+      <text x={tPos.x} y={tPos.y} fill={fill} fontSize={FONT} fontWeight="600"
         textAnchor="middle" dominantBaseline="central"
         transform={`rotate(${tAngle} ${tPos.x} ${tPos.y})`} style={labelStyle}>
         {label}
@@ -167,7 +167,7 @@ function Dimension({ dim, ratio, centroid, theme, selected, onDown }) {
 
 /* ------------------------------- canvas -------------------------------- */
 const BlueprintCanvas = forwardRef(function BlueprintCanvas(
-  { geometry, ratio, selectedDimId, onSelectDim, onUpdateDim, onAddDim, themeName = "blueprint" },
+  { geometry, ratio, selectedDimId, onSelectDim, onUpdateDim, onAddDim, onBeginHistory, themeName = "blueprint" },
   ref
 ) {
   const theme = THEMES[themeName] || THEMES.blueprint;
@@ -175,19 +175,23 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
   const h = geometry?.image_height || 1000;
   const centroid = useMemo(() => centroidOf(geometry?.entities || []), [geometry]);
   const snaps = useMemo(() => snapPointsOf(geometry?.entities || []), [geometry]);
+  const circles = useMemo(
+    () => (geometry?.entities || []).filter((e) => e.type === "circle"),
+    [geometry]
+  );
 
   const svgRef = useRef(null);
   useImperativeHandle(ref, () => svgRef.current);
 
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
-  const [addMode, setAddMode] = useState(false);
+  const [addTool, setAddTool] = useState(null); // 'linear' | 'diameter' | null
   const [addStart, setAddStart] = useState(null);
   const [cursor, setCursor] = useState(null);
-  const drag = useRef({ mode: null, dimId: null, last: null, moved: false });
+  const drag = useRef({ mode: null, dimId: null, which: null, last: null, moved: false });
 
   useEffect(() => {
     setView({ k: 1, x: 0, y: 0 });
-    setAddMode(false);
+    setAddTool(null);
     setAddStart(null);
   }, [geometry]);
 
@@ -211,6 +215,15 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
     return best || p;
   };
 
+  const nearestCircle = (p) => {
+    let best = null, bd = Infinity;
+    for (const c of circles) {
+      const d = len(sub({ x: c.cx, y: c.cy }, p));
+      if (d <= c.r + 14 / view.k && d < bd) { bd = d; best = c; }
+    }
+    return best;
+  };
+
   const zoomAt = (p, factor) => {
     setView((v) => {
       const k = clamp(v.k * factor, MIN_K, MAX_K);
@@ -230,11 +243,19 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
     return () => svg.removeEventListener("wheel", onWheel);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---- dimension drag (start from the dimension element) ---- */
+  /* ---- drags started from dimension elements / handles ---- */
   const startDimDrag = (e, dim) => {
-    if (addMode) return;
+    if (addTool) return;
     e.stopPropagation();
-    drag.current = { mode: "dim", dimId: dim.id, last: userCoords(e.clientX, e.clientY), moved: false };
+    onBeginHistory?.();
+    drag.current = { mode: "dim", dimId: dim.id, which: null, last: userCoords(e.clientX, e.clientY), moved: false };
+    svgRef.current?.setPointerCapture?.(e.pointerId);
+  };
+
+  const startEndpointDrag = (e, dim, which) => {
+    e.stopPropagation();
+    onBeginHistory?.();
+    drag.current = { mode: "endpoint", dimId: dim.id, which, last: userCoords(e.clientX, e.clientY), moved: false };
     svgRef.current?.setPointerCapture?.(e.pointerId);
   };
 
@@ -243,25 +264,36 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
     if (!dim) return;
     if (dim.kind === "linear") {
       const n = perp(norm(sub({ x: dim.x2, y: dim.y2 }, { x: dim.x1, y: dim.y1 })));
-      const curOff = linearOffset(dim, centroid);
-      onUpdateDim(dim.id, { offset: curOff + dot(delta, n) });
+      onUpdateDim(dim.id, { offset: linearOffset(dim, centroid) + dot(delta, n) });
     } else {
       const v = sub(cur, { x: dim.x1, y: dim.y1 });
       onUpdateDim(dim.id, { dirAngle: Math.atan2(v.y, v.x) });
     }
   };
 
+  const dragEndpoint = (cur) => {
+    const dim = geometry.dimensions.find((d) => d.id === drag.current.dimId);
+    if (!dim || dim.kind !== "linear") return;
+    const p = snap(cur);
+    const other = drag.current.which === "p1" ? { x: dim.x2, y: dim.y2 } : { x: dim.x1, y: dim.y1 };
+    const px = len(sub(p, other));
+    onUpdateDim(dim.id,
+      drag.current.which === "p1"
+        ? { x1: p.x, y1: p.y, px }
+        : { x2: p.x, y2: p.y, px });
+  };
+
   /* ---- background pointer (pan, or place add-points) ---- */
   const onPointerDown = (e) => {
     const cur = userCoords(e.clientX, e.clientY);
-    if (addMode) { drag.current = { mode: "add", last: cur, moved: false }; return; }
+    if (addTool) { drag.current = { mode: "add", last: cur, moved: false }; return; }
     drag.current = { mode: "pan", last: cur, moved: false };
     svgRef.current?.setPointerCapture?.(e.pointerId);
   };
 
   const onPointerMove = (e) => {
     const cur = userCoords(e.clientX, e.clientY);
-    if (addMode) setCursor(cur);
+    if (addTool) setCursor(cur);
     const ds = drag.current;
     if (!ds.mode) return;
     const delta = sub(cur, ds.last);
@@ -269,6 +301,7 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
     if (Math.abs(delta.x) + Math.abs(delta.y) > 3 / view.k) ds.moved = true;
     if (ds.mode === "pan") setView((v) => ({ ...v, x: v.x + delta.x, y: v.y + delta.y }));
     else if (ds.mode === "dim") dragDimension(cur, delta);
+    else if (ds.mode === "endpoint") dragEndpoint(cur);
   };
 
   const onPointerUp = (e) => {
@@ -277,36 +310,55 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
     svgRef.current?.releasePointerCapture?.(e.pointerId);
     if (ds.mode === "dim" && !ds.moved) onSelectDim(ds.dimId);
     else if (ds.mode === "pan" && !ds.moved) onSelectDim(null);
-    else if (ds.mode === "add" && !ds.moved) placePoint(cur);
-    drag.current = { mode: null, dimId: null, last: null, moved: false };
+    else if (ds.mode === "add" && !ds.moved) {
+      if (addTool === "linear") placeLinearPoint(cur);
+      else if (addTool === "diameter") placeDiameter(cur);
+    }
+    drag.current = { mode: null, dimId: null, which: null, last: null, moved: false };
   };
 
-  const placePoint = (p) => {
+  const placeLinearPoint = (p) => {
     const sp = snap(p);
     if (!addStart) { setAddStart(sp); return; }
     const px = len(sub(sp, addStart));
     if (px > 5) {
-      const n = geometry.dimensions.length + 1;
       onAddDim({
         id: `u${Date.now().toString(36)}`,
         kind: "linear",
         x1: addStart.x, y1: addStart.y, x2: sp.x, y2: sp.y,
-        px, label: `C${n}`,
+        px, label: `C${geometry.dimensions.length + 1}`,
       });
     }
     setAddStart(null);
-    setAddMode(false);
+    setAddTool(null);
   };
 
-  const toggleAdd = () => {
-    setAddMode((m) => !m);
+  const placeDiameter = (p) => {
+    const c = nearestCircle(p);
+    if (c) {
+      onAddDim({
+        id: `u${Date.now().toString(36)}`,
+        kind: "diameter",
+        x1: c.cx, y1: c.cy, x2: c.cx, y2: c.cy,
+        px: c.r * 2, label: `D${geometry.dimensions.length + 1}`,
+      });
+    }
+    setAddTool(null);
+  };
+
+  const pickTool = (tool) => {
+    setAddTool((t) => (t === tool ? null : tool));
     setAddStart(null);
   };
 
   if (!geometry) return null;
   const center = () => ({ x: w / 2, y: h / 2 });
-  const cursorClass = addMode ? "cursor-crosshair" : drag.current.mode === "pan" ? "cursor-grabbing" : "cursor-grab";
-  const snappedCursor = addMode && cursor ? snap(cursor) : null;
+  const cursorClass = addTool ? "cursor-crosshair" : drag.current.mode === "pan" ? "cursor-grabbing" : "cursor-grab";
+  const snappedCursor = addTool === "linear" && cursor ? snap(cursor) : null;
+  const hoverCircle = addTool === "diameter" && cursor ? nearestCircle(cursor) : null;
+  const selDim = geometry.dimensions.find((d) => d.id === selectedDimId);
+  const showHandles = !addTool && selDim && selDim.kind === "linear";
+  const hr = 7 / view.k;
 
   return (
     <div className="relative h-full w-full">
@@ -342,24 +394,37 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
           {geometry.entities.map((e) => (
             <Entity key={e.id} e={e} color={theme.part} />
           ))}
-          <g style={{ pointerEvents: addMode ? "none" : "auto" }}>
+          <g style={{ pointerEvents: addTool ? "none" : "auto" }}>
             {geometry.dimensions.map((dm) => (
               <Dimension key={dm.id} dim={dm} ratio={ratio} centroid={centroid} theme={theme}
                 selected={selectedDimId === dm.id} onDown={startDimDrag} />
             ))}
           </g>
 
-          {/* add-dimension preview */}
-          {addMode && addStart && snappedCursor && (
+          {/* endpoint handles for the selected linear dimension */}
+          {showHandles &&
+            [["p1", selDim.x1, selDim.y1], ["p2", selDim.x2, selDim.y2]].map(([which, hx, hy]) => (
+              <circle key={which} cx={hx} cy={hy} r={hr} fill={theme.accent} stroke={theme.bg}
+                strokeWidth={2 / view.k} className="cursor-pointer"
+                onPointerDown={(e) => startEndpointDrag(e, selDim, which)} />
+            ))}
+
+          {/* add-linear preview */}
+          {addTool === "linear" && addStart && snappedCursor && (
             <line x1={addStart.x} y1={addStart.y} x2={snappedCursor.x} y2={snappedCursor.y}
               stroke={theme.accent} strokeWidth={DIM_STROKE * 1.5} strokeDasharray="8 6" />
           )}
-          {addMode && addStart && (
-            <circle cx={addStart.x} cy={addStart.y} r={6 / view.k} fill={theme.accent} />
+          {addTool === "linear" && addStart && (
+            <circle cx={addStart.x} cy={addStart.y} r={hr} fill={theme.accent} />
           )}
           {snappedCursor && (
-            <circle cx={snappedCursor.x} cy={snappedCursor.y} r={6 / view.k}
-              fill="none" stroke={theme.accent} strokeWidth={2 / view.k} />
+            <circle cx={snappedCursor.x} cy={snappedCursor.y} r={hr} fill="none"
+              stroke={theme.accent} strokeWidth={2 / view.k} />
+          )}
+          {/* diameter tool: highlight the circle under the cursor */}
+          {hoverCircle && (
+            <circle cx={hoverCircle.cx} cy={hoverCircle.cy} r={hoverCircle.r} fill="none"
+              stroke={theme.accent} strokeWidth={3 / view.k} />
           )}
         </g>
       </svg>
@@ -371,22 +436,29 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
         <button onClick={() => setView({ k: 1, x: 0, y: 0 })} className="border-t border-navy-700 px-3 py-1.5 text-[10px] font-semibold text-brand-200 hover:bg-navy-700" title="Restablecer vista">1:1</button>
       </div>
 
-      {/* add-dimension tool */}
+      {/* add-dimension tools */}
       <div className="absolute right-4 top-4 flex flex-col items-end gap-2">
-        <button
-          onClick={toggleAdd}
-          className={[
-            "rounded-lg border px-3 py-2 text-sm font-semibold backdrop-blur transition",
-            addMode
-              ? "border-amber-400 bg-amber-400/90 text-navy-900"
-              : "border-navy-600 bg-navy-900/80 text-brand-200 hover:bg-navy-700",
-          ].join(" ")}
-        >
-          ＋ Cota
-        </button>
-        {addMode && (
-          <div className="max-w-[210px] rounded-lg border border-amber-400/50 bg-navy-900/85 px-3 py-2 text-right text-xs text-amber-200 backdrop-blur">
-            {addStart ? "Clic en el 2.º punto" : "Clic en el 1.er punto"} · se ajusta a vértices y centros
+        <div className="flex gap-2">
+          {[["linear", "＋ Cota"], ["diameter", "＋ Ø"]].map(([tool, txt]) => (
+            <button
+              key={tool}
+              onClick={() => pickTool(tool)}
+              className={[
+                "rounded-lg border px-3 py-2 text-sm font-semibold backdrop-blur transition",
+                addTool === tool
+                  ? "border-amber-400 bg-amber-400/90 text-navy-900"
+                  : "border-navy-600 bg-navy-900/80 text-brand-200 hover:bg-navy-700",
+              ].join(" ")}
+            >
+              {txt}
+            </button>
+          ))}
+        </div>
+        {addTool && (
+          <div className="max-w-[230px] rounded-lg border border-amber-400/50 bg-navy-900/85 px-3 py-2 text-right text-xs text-amber-200 backdrop-blur">
+            {addTool === "linear"
+              ? `${addStart ? "Clic en el 2.º punto" : "Clic en el 1.er punto"} · se ajusta a vértices y centros`
+              : "Clic sobre un círculo para acotar su diámetro"}
           </div>
         )}
       </div>
