@@ -6,6 +6,7 @@ Run:  uvicorn main:app --reload --port 8000
 from __future__ import annotations
 
 import base64
+import json
 import os
 
 from dotenv import load_dotenv
@@ -72,5 +73,17 @@ async def analyze(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except RuntimeError as exc:  # missing API key
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Dev log: prints the geometry Claude returned so we can inspect and
+    # iterate the prompt. Set SNAPCAD_DEBUG=0 to silence.
+    if os.getenv("SNAPCAD_DEBUG", "1") != "0":
+        print(
+            f"[SnapCAD] '{geometry.get('part_name')}' "
+            f"entities={len(geometry.get('entities', []))} "
+            f"dims={len(geometry.get('dimensions', []))} "
+            f"confidence={geometry.get('confidence')}",
+            flush=True,
+        )
+        print("[SnapCAD] JSON:", json.dumps(geometry, ensure_ascii=False), flush=True)
 
     return geometry
