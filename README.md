@@ -23,6 +23,8 @@ SnapCAD/
 - 🔍 **Pan & zoom** en el lienzo (rueda para zoom hacia el cursor, arrastrar para mover, botón 1:1).
 - ✏️ **Editar cotas**: renombrar, eliminar, **arrastrar para reposicionar**, **mover los extremos** de una cota lineal, **agregar cotas** (2 clics con *snapping*) y **acotar diámetros** (clic en un círculo).
 - ↶ **Deshacer / Rehacer** (Ctrl+Z / Ctrl+Shift+Z) coalescido por interacción.
+- ⌨️ Atajos: **Supr** elimina la cota seleccionada, **Esc** cancela la herramienta / deselecciona.
+- ⭐ Indicador de la **cota de referencia** y lector de **zoom %**.
 - 📏 Escala automática a partir de una sola medida de referencia.
 - 🎨 Temas Blueprint / Blanco.
 - 💾 Exportar a **SVG** y **PDF vectorial** (con respaldo rasterizado).

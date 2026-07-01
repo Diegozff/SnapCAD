@@ -15,6 +15,7 @@ export default function App() {
   const [error, setError] = useState(null);
 
   const [ratio, setRatio] = useState(null);
+  const [refDimId, setRefDimId] = useState(null);
   const [selectedDimId, setSelectedDimId] = useState(null);
   const [themeName, setThemeName] = useState("blueprint");
   const [isDemo, setIsDemo] = useState(false);
@@ -55,6 +56,7 @@ export default function App() {
     setLoading(false);
     setImageURL(null);
     setRatio(null);
+    setRefDimId(null);
     setSelectedDimId(null);
     setIsDemo(true);
     setPast([]);
@@ -68,6 +70,7 @@ export default function App() {
     setLoading(true);
     setGeometry(null);
     setRatio(null);
+    setRefDimId(null);
     setSelectedDimId(null);
     setIsDemo(false);
     setPast([]);
@@ -85,7 +88,10 @@ export default function App() {
 
   function setReference(dim, realMm) {
     const r = computeRatio(dim.px, realMm);
-    if (r != null) setRatio(r);
+    if (r != null) {
+      setRatio(r);
+      setRefDimId(dim.id);
+    }
   }
 
   function renameDim(id, label) {
@@ -99,6 +105,7 @@ export default function App() {
     beginHistory();
     setGeometry((g) => ({ ...g, dimensions: g.dimensions.filter((d) => d.id !== id) }));
     if (selectedDimId === id) setSelectedDimId(null);
+    if (refDimId === id) setRefDimId(null);
   }
 
   // Live mutator used during drags and rename — history is snapshotted by the
@@ -121,6 +128,7 @@ export default function App() {
     setImageURL(null);
     setError(null);
     setRatio(null);
+    setRefDimId(null);
     setSelectedDimId(null);
     setIsDemo(false);
     setPast([]);
@@ -134,6 +142,15 @@ export default function App() {
   useEffect(() => {
     function onKey(e) {
       if (!geometry) return;
+      const typing = /^(input|textarea|select)$/i.test(e.target?.tagName || "");
+
+      if (e.key === "Escape") { setSelectedDimId(null); return; }
+      if (!typing && (e.key === "Delete" || e.key === "Backspace") && selectedDimId) {
+        e.preventDefault();
+        deleteDim(selectedDimId);
+        return;
+      }
+
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       const key = e.key.toLowerCase();
@@ -172,6 +189,7 @@ export default function App() {
               <Sidebar
                 geometry={geometry}
                 ratio={ratio}
+                refDimId={refDimId}
                 selectedDimId={selectedDimId}
                 onSelectDim={setSelectedDimId}
                 onSetReference={setReference}

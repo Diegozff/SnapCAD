@@ -8,6 +8,7 @@ import { dimensionDisplay } from "../lib/scale.js";
 export default function Sidebar({
   geometry,
   ratio,
+  refDimId,
   selectedDimId,
   onSelectDim,
   onSetReference,
@@ -122,6 +123,11 @@ export default function Sidebar({
         {ratio != null && (
           <div className="mt-3 rounded-lg bg-brand-500/15 px-3 py-2 text-xs text-brand-200">
             Escala activa: <b className="text-white">{ratio.toFixed(4)} mm/px</b>
+            {refDimId && (
+              <div className="mt-0.5 text-brand-300">
+                Referencia: ★ {geometry?.dimensions.find((d) => d.id === refDimId)?.label || "—"}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -134,6 +140,9 @@ export default function Sidebar({
             <input
               value={label}
               onFocus={onBeginHistory}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
               onChange={(e) => {
                 setLabel(e.target.value);
                 onRenameDim(selected.id, e.target.value);
@@ -174,7 +183,10 @@ export default function Sidebar({
                       : "bg-navy-800/60 text-brand-100 hover:bg-navy-700/60",
                   ].join(" ")}
                 >
-                  <span className="font-medium">{d.label}</span>
+                  <span className="font-medium">
+                    {d.id === refDimId && <span title="Cota de referencia">★ </span>}
+                    {d.label}
+                  </span>
                   <span className="font-mono text-xs">
                     {ratio != null
                       ? `${dimensionDisplay(d, ratio)} mm`
@@ -192,6 +204,12 @@ export default function Sidebar({
             );
           })}
         </ul>
+        {geometry?.dimensions.length === 0 && (
+          <p className="mt-2 rounded-lg bg-navy-800/60 px-3 py-3 text-center text-xs text-brand-200">
+            No hay cotas. Usa <b className="text-brand-300">＋ Cota</b> o{" "}
+            <b className="text-brand-300">＋ Ø</b> en el plano para crear una.
+          </p>
+        )}
       </div>
 
       {/* actions */}

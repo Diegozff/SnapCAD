@@ -243,6 +243,15 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
     return () => svg.removeEventListener("wheel", onWheel);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Escape cancels an active add-tool.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { setAddTool(null); setAddStart(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   /* ---- drags started from dimension elements / handles ---- */
   const startDimDrag = (e, dim) => {
     if (addTool) return;
@@ -433,7 +442,7 @@ const BlueprintCanvas = forwardRef(function BlueprintCanvas(
       <div className="absolute left-4 top-4 flex flex-col overflow-hidden rounded-lg border border-navy-600 bg-navy-900/80 backdrop-blur">
         <button onClick={() => zoomAt(center(), 1.25)} className="px-3 py-2 text-lg leading-none text-brand-200 hover:bg-navy-700" title="Acercar">+</button>
         <button onClick={() => zoomAt(center(), 1 / 1.25)} className="border-t border-navy-700 px-3 py-2 text-lg leading-none text-brand-200 hover:bg-navy-700" title="Alejar">−</button>
-        <button onClick={() => setView({ k: 1, x: 0, y: 0 })} className="border-t border-navy-700 px-3 py-1.5 text-[10px] font-semibold text-brand-200 hover:bg-navy-700" title="Restablecer vista">1:1</button>
+        <button onClick={() => setView({ k: 1, x: 0, y: 0 })} className="border-t border-navy-700 px-3 py-1.5 text-[10px] font-semibold text-brand-200 hover:bg-navy-700" title="Restablecer vista (1:1)">{Math.round(view.k * 100)}%</button>
       </div>
 
       {/* add-dimension tools */}
